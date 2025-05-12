@@ -2,89 +2,105 @@ import numpy as np
 import pandas as pd
 import matplotlib
 from sklearn.neighbors import KNeighborsClassifier
-
-# matplotlib.use('Agg')  # Ou essayez 'TkAgg'
-matplotlib.use('Qt5Agg')  # Ou essayez 'TkAgg'
-import matplotlib.pyplot as plt
+from sklearn.linear_model import LogisticRegression, Perceptron
+from sklearn.model_selection import train_test_split, KFold, cross_val_score
 from sklearn.preprocessing import LabelEncoder
-from pandas.plotting import scatter_matrix
+from sklearn.metrics import accuracy_score, confusion_matrix, precision_score, recall_score, f1_score
 import seaborn as sns
+import pickle
 
+# Try 'Qt5Agg' first, fall back to 'Agg' if needed (for MacOS)
+try:
+    matplotlib.use('Qt5Agg')
+except ImportError:
+    matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+
+print("--- Chargement et Inspection Initiales des Données ---")
+# --- 1. Chargement des données ---
 df = pd.read_csv('car_insurance.csv')
 
 # Affichage de types
+print("\nTypes de données:")
 print(df.dtypes)
 
 # Affichage des premiers enregistrements
+print("\nPremiers enregistrements:")
 print(df.head())
 
 # Affichage de la taille des données
+print("\nTaille du jeu de données (lignes, colonnes):")
 print(df.shape)
 
-# Check for NaNs in each column and print the results
-print("Columns with NaN values:")
+# --- 2. Gestion des valeurs manquantes (NaNs) ---
+print("\n--- Gestion des Valeurs Manquantes ---")
+print("Colonnes avec des valeurs NaN:")
 for col in df.columns:
     if df[col].isnull().any():
         nan_count = df[col].isnull().sum()
         print(f"- {col}: {nan_count} NaN(s)")
 
-        median_value = df[col].median()
-        df[col] = df[col].fillna(median_value)
+        # Remplacer les NaN par la médiane pour les colonnes numériques
+        # Assurez-vous que la colonne est numérique avant de calculer la médiane
+        if df[col].dtype in ['int64', 'float64']:
+             median_value = df[col].median()
+             df[col] = df[col].fillna(median_value)
+             print(f"  NaNs dans '{col}' remplacés par la médiane ({median_value:.2f}).")
+        else:
+             # Pour les colonnes non numériques avec NaNs, on pourrait utiliser le mode ou une autre stratégie
+             # Dans ce dataset, les NaNs sont dans des colonnes numériques, donc la médiane est appropriée ici.
+             pass # Aucune colonne non numérique avec NaN identifiée dans l'output précédent
 
-# Identify numeric columns
+# Vérifier s'il reste des NaNs après imputation
+print("\nVérification des NaNs après imputation:")
+if df.isnull().sum().sum() == 0:
+    print("Aucune valeur NaN restante dans le jeu de données.")
+else:
+    print("Des valeurs NaN subsistent dans certaines colonnes:")
+    print(df.isnull().sum()[df.isnull().sum() > 0])
+
+
+# --- 3. Visualisation des distributions (Histograms) ---
+print("\n--- Visualisation des Distributions Numériques (Histograms) ---")
+# Identifier les colonnes numériques après imputation
 numeric_cols = df.select_dtypes(include=['int64', 'float64']).columns
 
 # Create histograms for each numeric column
 df[numeric_cols].hist(figsize=(12, 10))
-plt.suptitle('Histograms of Numeric Columns', y=1.02) # Add a general title
+plt.suptitle('Histograms of Numeric Columns (After NaN Imputation)', y=1.02) # Add a general title
 plt.tight_layout() # Adjust layout to prevent overlapping titles
 plt.show()
 
-## Normalisation des données numériques
-# On peut voir des données abérrantes sur les Children et sur les speeding violations
-median_col_children = df['children'].median()
-median_col_speeding_violations = df['speeding_violations'].median()
-
-df['children'] = df['children'].fillna(median_col_children)
-df['speeding_violations'] = df['speeding_violations'].fillna(median_col_speeding_violations)
-
-df[numeric_cols].hist(figsize=(12, 10))
-plt.suptitle('Histograms of Numeric Columns', y=1.02) # Add a general title
-plt.tight_layout() # Adjust layout to prevent overlapping titles
-plt.show()
-
+# --- 4. Normalisation des chaînes et Encodage des variables qualitatives ---
+print("\n--- Normalisation des Chaînes et Encodage Qualitatif ---")
 # Identifier les colonnes de type objet (qui contiennent généralement des chaînes)
 string_cols = df.select_dtypes(include='object').columns
 
-## Normalisation des chaînes
-
+print("\n--- Gestion des Valeurs None ---")
 # Itérer sur chaque colonne de type chaîne
 for col in string_cols:
-    # Vérifier si la colonne contient la valeur 'none'
+    # Vérifier si la colonne contient la valeur 'none' et la remplacer par le mode
     if 'none' in df[col].unique():
-        # Calculer la valeur la plus fréquente dans la colonne
-        most_frequent = df[col].mode()[0]  # .mode() retourne une Series, on prend le premier élément
-
-        # Remplacer toutes les occurrences de 'none' par la valeur la plus fréquente
+        most_frequent = df[col].mode()[0]
         df[col] = df[col].replace('none', most_frequent)
+        print(f"Valeurs 'none' dans '{col}' remplacées par le mode : '{most_frequent}'.")
 
-# Identifier les colonnes qualitatives (de type 'object')
+# Identifier les colonnes qualitatives (de type 'object') après la normalisation des chaînes
 qualitative_cols = df.select_dtypes(include='object').columns
 
 # Initialiser le LabelEncoder
 label_encoder = LabelEncoder()
 
+print("\n--- Encodage des Variables Qualitatives ---")
 # Itérer sur chaque colonne qualitative et appliquer l'encodage
 for col in qualitative_cols:
-    # Vérifier si la colonne contient des valeurs non numériques (pour éviter les erreurs)
-    if df[col].dtype == 'object':
-        # Appliquer l'encodage LabelEncoder à la colonne
-        df[col] = label_encoder.fit_transform(df[col])
+    # Appliquer l'encodage LabelEncoder à la colonne
+    df[col] = label_encoder.fit_transform(df[col])
 
-        # (Optionnel) Afficher les classes encodées pour comprendre la transformation
-        print(f"Classes encodées pour la colonne '{col}':")
-        print(label_encoder.classes_)
-        print("-" * 30)
+    # Afficher les classes encodées pour comprendre la transformation
+    print(f"\nClasses encodées pour la colonne '{col}':")
+    print(label_encoder.classes_)
+    print("-" * 30)
 
 # Afficher les premières lignes du DataFrame modifié pour vérifier
 print("\nDataFrame après application de LabelEncoder sur les colonnes qualitatives:")
@@ -94,46 +110,51 @@ print(df.head())
 print("\nTypes de données après encodage:")
 print(df.dtypes)
 
+# --- 5. Détection et Traitement des Outliers ---
+print("\n--- Détection et Traitement des Outliers ---")
+
 def detect_outliers_percentile_indices(series, lower_percentile=0.01, upper_percentile=0.99):
+    """Détecte les indices des outliers en utilisant la méthode des percentiles."""
     lower_threshold = series.quantile(lower_percentile)
     upper_threshold = series.quantile(upper_percentile)
     outlier_indices = series[(series < lower_threshold) | (series > upper_threshold)].index
     return outlier_indices
 
-# Identifier les indices des outliers dans 'children'
+# Identifier les indices des outliers dans 'children' et 'speeding_violations'
+# Note: Ces colonnes ont déjà été traitées pour les NaNs, mais on peut encore avoir des outliers extrêmes.
 outliers_children_indices = detect_outliers_percentile_indices(df['children'])
-print("Indices des outliers (Z-score) dans 'children':")
+print("\nIndices des outliers (percentile) dans 'children':")
 print(outliers_children_indices)
 
-# Identifier les indices des outliers dans 'speeding_violations'
 outliers_speeding_indices = detect_outliers_percentile_indices(df['speeding_violations'])
-print("\nIndices des outliers (Z-score) dans 'speeding_violations':")
+print("\nIndices des outliers (percentile) dans 'speeding_violations':")
 print(outliers_speeding_indices)
 
-# Calculer la médiane des colonnes 'children' et 'speeding_violations'
+# Calculer la médiane des colonnes 'children' et 'speeding_violations' (après imputation des NaNs)
 median_children = df['children'].median()
 median_speeding = df['speeding_violations'].median()
 
 # Remplacer les outliers par la médiane dans chaque colonne respectivement
 for index in outliers_children_indices:
     df.loc[index, 'children'] = median_children
+    print(f"Outlier à l'index {index} dans 'children' remplacé par la médiane ({median_children}).")
 
 for index in outliers_speeding_indices:
     df.loc[index, 'speeding_violations'] = median_speeding
+    print(f"Outlier à l'index {index} dans 'speeding_violations' remplacé par la médiane ({median_speeding}).")
 
 # Afficher les histogrammes du DataFrame APRÈS le remplacement des outliers
-df.hist(figsize=(12, 10))
-plt.suptitle('Histograms of Columns After Outlier Replacement', y=1.02)
+print("\n--- Visualisation des Distributions Numériques (Après Traitement des Outliers) ---")
+df[numeric_cols].hist(figsize=(12, 10))
+plt.suptitle('Histograms of Numeric Columns After Outlier Replacement', y=1.02)
 plt.tight_layout()
 plt.show()
 
 
-
-
-
+# --- 6. Analyse de Corrélation ---
 print("\n--- Analyse de Corrélation ---")
 
-# Calculer la matrice de corrélation pour toutes les variables numériques
+# Calculer la matrice de corrélation pour toutes les variables numériques (incluant les colonnes encodées)
 correlation_matrix = df.corr(numeric_only=True)
 print("\nMatrice de Corrélation :\n", correlation_matrix)
 
@@ -147,39 +168,37 @@ upper_triangle = np.triu(correlation_matrix, k=1)
 highly_correlated_pairs = []
 threshold_correlation = 0.5  # Seuil de corrélation à considérer comme élevé
 
-for i in range(len(correlation_matrix.columns)):
-    for j in range(i + 1, len(correlation_matrix.columns)):
+# Obtenir les noms des colonnes numériques pour l'indexation
+numeric_col_names = correlation_matrix.columns.tolist()
+
+for i in range(len(numeric_col_names)):
+    for j in range(i + 1, len(numeric_col_names)):
         if abs(upper_triangle[i, j]) > threshold_correlation:
-            highly_correlated_pairs.append((correlation_matrix.columns[i], correlation_matrix.columns[j], upper_triangle[i, j]))
+            highly_correlated_pairs.append((numeric_col_names[i], numeric_col_names[j], upper_triangle[i, j]))
 
 print(f"\nPaires de variables d'entrée fortement corrélées (>{threshold_correlation}):\n", highly_correlated_pairs)
 
 # Affichage de la matrice de corrélation sous forme de heatmap
-plt.figure(figsize=(12, 10))
+plt.figure(figsize=(14, 12)) # Increased figure size for better readability
 plt.title("Matrice de corrélation")
-sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', fmt=".2f")
+sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', fmt=".2f", annot_kws={"size": 8}) # Adjusted annot_kws for smaller font
 plt.tight_layout()
 plt.show()
 
 
-
-from sklearn.model_selection import train_test_split, KFold, cross_val_score
+# --- 7. Extraction des jeux d'apprentissage et de test ---
+print("\n--- Extraction des jeux d'apprentissage et de test ---")
 
 # Identifier la variable cible (y) et les variables d'entrée (X)
 # Nous supposons que 'outcome' est la variable cible.
 # Si votre dataset utilise un autre nom pour la variable cible (ex: 'is_claim', 'fraud_reported'),
 # veuillez ajuster la ligne suivante en conséquence.
 # Si l'objectif est de prédire 'past_accidents', utilisez: y = df['past_accidents']
-try:
-    y = df['outcome']
-    X = df.drop('outcome', axis=1)
-except KeyError:
-    print("La colonne 'outcome' n'a pas été trouvée. Utilisation de 'past_accidents' comme cible par défaut.")
-    y = df['past_accidents']
-    X = df.drop('past_accidents', axis=1)
+target_variable = 'outcome'
+y = df[target_variable]
+X = df.drop(target_variable, axis=1)
 
-
-# Convertir les DataFrames en tableaux NumPy si nécessaire (train_test_split accepte aussi les DataFrames)
+# Convertir les DataFrames en tableaux NumPy (train_test_split accepte aussi les DataFrames, mais NumPy est souvent utilisé)
 X_np = X.to_numpy()
 y_np = y.to_numpy()
 
@@ -196,7 +215,6 @@ test_samples = len(X_test)
 train_proportion = train_samples / total_samples
 test_proportion = test_samples / total_samples
 
-print(f"\n--- Extraction des jeux d'apprentissage et de test ---")
 print(f"Taille totale du jeu de données : {total_samples} échantillons")
 print(f"Taille du jeu d'apprentissage (X_train, y_train) : {train_samples} échantillons")
 print(f"Taille du jeu de test (X_test, y_test) : {test_samples} échantillons")
@@ -208,34 +226,28 @@ print(f"Forme de y_train: {y_train.shape}")
 print(f"Forme de X_test: {X_test.shape}")
 print(f"Forme de y_test: {y_test.shape}")
 
-from sklearn.linear_model import LogisticRegression, Perceptron
+
+# --- 8. Entraînement et Évaluation du Modèle de Régression Logistique (Split unique) ---
+print("\n--- Entraînement et Évaluation du Modèle de Régression Logistique (Split unique) ---")
 
 # Instancier le modèle de Régression Logistique
-# On peut ajouter des paramètres comme solver='liblinear' ou max_iter=1000
-# pour un meilleur contrôle, mais les valeurs par défaut sont souvent un bon point de départ.
+# Increased max_iter to 10000 to help with convergence
 model_logistic_regression = LogisticRegression(random_state=42, max_iter=10000)
 
 # Entraîner le modèle sur le jeu d'apprentissage
-print("\n--- Entraînement du modèle de Régression Logistique ---")
+print("Entraînement du modèle de Régression Logistique sur le jeu d'apprentissage...")
 model_logistic_regression.fit(X_train, y_train)
-
 print("Modèle de Régression Logistique entraîné avec succès.")
-
-# Afficher les coefficients appris (optionnel)
-# print("\nCoefficients du modèle :", model_logistic_regression.coef_)
-# print("Interception (bias) du modèle :", model_logistic_regression.intercept_)
 
 # Effectuer des prédictions sur les données d'entrée du jeu de test
 y_pred = model_logistic_regression.predict(X_test)
 
-print("\n--- Prédictions sur le jeu de test ---")
+print("\n--- Prédictions sur le jeu de test (Split unique) ---")
 print("Quelques exemples de comparaison (Prédit vs Réel) :")
 for i in range(10): # Afficher les 10 premiers exemples
     print(f"Échantillon {i+1}: Prédit = {y_pred[i]}, Réel = {y_test[i]}")
 
-from sklearn.metrics import accuracy_score, confusion_matrix, precision_score, recall_score, f1_score
-
-print("\n--- Évaluation quantitative du modèle ---")
+print("\n--- Évaluation quantitative du modèle (Split unique) ---")
 
 # 1. Accuracy Score
 accuracy = accuracy_score(y_test, y_pred)
@@ -247,83 +259,53 @@ print("\nMatrice de Confusion :")
 print(conf_matrix)
 
 # 3. Précision (Precision Score)
-# Pour la classification binaire, 'pos_label' est souvent 1 (la classe "positive")
-precision = precision_score(y_test, y_pred, pos_label=1, average='binary') # ou average=None si on veut par classe
+# For binary classification, 'pos_label' is often 1 (the "positive" class)
+# Use zero_division=0 to handle cases where there are no predicted positives
+precision = precision_score(y_test, y_pred, pos_label=1, average='binary', zero_division=0)
 print(f"\nPrécision (Precision Score) : {precision:.4f}")
 
 # 4. Rappel (Recall Score)
-recall = recall_score(y_test, y_pred, pos_label=1, average='binary')
+# Use zero_division=0 to handle cases where there are no actual positives
+recall = recall_score(y_test, y_pred, pos_label=1, average='binary', zero_division=0)
 print(f"\nRappel (Recall Score) : {recall:.4f}")
 
 # 5. F1 Score
-f1 = f1_score(y_test, y_pred, pos_label=1, average='binary')
+# Use zero_division=0 to handle cases where there are no predicted or actual positives
+f1 = f1_score(y_test, y_pred, pos_label=1, average='binary', zero_division=0)
 print(f"\nScore F1 : {f1:.4f}")
 
 
-
-
+# --- 9. Amélioration de l'évaluation par Validation Croisée (K-Fold) ---
 print("\n--- Amélioration de l'évaluation par Validation Croisée (K-Fold) ---")
 
-# 2. Définir la stratégie de validation croisée
-# KFold permet de découper les données en K plis (folds).
-# n_splits = 5 est un choix courant.
-# shuffle=True assure que les données sont mélangées avant de créer les plis.
-# random_state=42 assure la reproductibilité du découpage.
+# Define the cross-validation strategy
 kf = KFold(n_splits=5, shuffle=True, random_state=42)
 
-# 3. Réaliser la validation croisée et obtenir les scores
-# cross_val_score retourne un tableau des scores pour chaque pli.
-# Nous allons utiliser 'accuracy' comme métrique pour une comparaison directe avec le résultat précédent.
+# Use the same Logistic Regression model instance configuration
 model_logistic_regression_cv = LogisticRegression(random_state=42, max_iter=10000)
 
+# Perform cross-validation and get the scores
+# We will use 'accuracy' as the metric for comparison
 cv_scores = cross_val_score(model_logistic_regression_cv, X, y, cv=kf, scoring='accuracy')
 
 print(f"\nScores d'exactitude pour chaque pli de la validation croisée (5 plis) :")
 print(cv_scores)
 
-# 4. Analyser les résultats de la validation croisée
+# Analyze cross-validation results
 mean_cv_accuracy = np.mean(cv_scores)
 std_cv_accuracy = np.std(cv_scores)
 
 print(f"\nExactitude moyenne de la validation croisée : {mean_cv_accuracy:.4f}")
 print(f"Écart-type de l'exactitude de la validation croisée : {std_cv_accuracy:.4f}")
 
-# Comparaison avec le résultat précédent (obtenu avec un seul split)
-previous_accuracy = 0.8136
-print(f"\n--- Comparaison ---")
-print(f"Exactitude obtenue avec un seul split d'apprentissage/test : {previous_accuracy:.4f}")
-print(f"Exactitude moyenne obtenue avec la validation croisée : {mean_cv_accuracy:.4f}")
-
-# Discussion des résultats
-print("\n--- Analyse et Discussion ---")
-if mean_cv_accuracy < previous_accuracy:
-    print(f"L'exactitude moyenne en validation croisée ({mean_cv_accuracy:.4f}) est légèrement inférieure ou similaire à celle obtenue sur le seul jeu de test ({previous_accuracy:.4f}).")
-    print("Cela pourrait indiquer que l'exactitude du split unique était légèrement optimiste ou que la variation est normale entre les splits.")
-else:
-    print(f"L'exactitude moyenne en validation croisée ({mean_cv_accuracy:.4f}) est légèrement supérieure ou similaire à celle obtenue sur le seul jeu de test ({previous_accuracy:.4f}).")
-    print("Cela suggère que l'estimation précédente était cohérente avec la performance moyenne sur différents sous-ensembles de données.")
-
-print(f"L'écart-type de {std_cv_accuracy:.4f} indique la variabilité des performances du modèle sur les différents plis.")
-print("Un écart-type faible signifie que le modèle est relativement stable et performe de manière similaire sur différents sous-ensembles de données.")
-print("La validation croisée donne une estimation plus robuste et fiable de la performance généralisée du modèle, car elle teste le modèle sur plusieurs combinaisons d'apprentissage et de test.")
-
-# Note on ConvergenceWarning: The same ConvergenceWarning may appear during cross-validation
-# if the underlying LogisticRegression model still struggles to converge within max_iter=100 for some folds.
-# Scaling the data (e.g., using StandardScaler) before training is generally recommended for Logistic Regression
-# and can help mitigate this warning and potentially improve performance.
-
-
-
+# --- 10. Comparaison avec d'autres algorithmes ---
 print("\n--- Comparaison avec d'autres algorithmes de classification ---")
-
-# Define the cross-validation strategy (same as before)
-kf = KFold(n_splits=5, shuffle=True, random_state=42)
 
 # Define the classifiers to compare with some initial hyperparameters
 classifiers = {
-    "Régression Logistique": LogisticRegression(random_state=42, max_iter=10000), # Increased max_iter to avoid ConvergenceWarning
-    "Perceptron": Perceptron(random_state=42, max_iter=10000, tol=1e-3), # Common parameters for Perceptron
-    "K-Plus Proches Voisins (K=5)": KNeighborsClassifier(n_neighbors=5) # K=5 is a common starting point
+    "Régression Logistique": LogisticRegression(random_state=42, max_iter=10000),
+    "Perceptron": Perceptron(random_state=42, max_iter=10000, tol=1e-3),
+    "K-Plus Proches Voisins (K=5)": KNeighborsClassifier(n_neighbors=5)
 }
 
 results = {}
@@ -332,6 +314,7 @@ for name, model in classifiers.items():
     print(f"\n--- Évaluation du modèle : {name} ---")
     try:
         # Perform cross-validation
+        # Use X and y (the full dataset) for cross-validation
         cv_scores = cross_val_score(model, X, y, cv=kf, scoring='accuracy')
 
         # Analyze results
@@ -352,25 +335,38 @@ print("\n--- Synthèse des résultats de comparaison ---")
 for name, res in results.items():
     print(f"- {name}: Exactitude moyenne = {res['mean_accuracy']:.4f} (Écart-type = {res['std_accuracy']:.4f})")
 
-# Identify the best performing model
+# Identify the best performing model based on mean cross-validation accuracy
 if results:
     best_model_name = max(results, key=lambda k: results[k]['mean_accuracy'])
     print(f"\nLe meilleur modèle basé sur l'exactitude moyenne en validation croisée est : {best_model_name}")
     print(f"Avec une exactitude moyenne de : {results[best_model_name]['mean_accuracy']:.4f}")
 
-import pickle
+    # Get the actual best model instance from the classifiers dictionary
+    best_model = classifiers[best_model_name]
 
+    # Re-train the best model on the *entire* training set (X_train, y_train)
+    # This is typically done before saving the model for production
+    print(f"\nEntraînement du meilleur modèle ({best_model_name}) sur le jeu d'apprentissage complet avant sauvegarde...")
+    best_model.fit(X_train, y_train)
+    print(f"Modèle {best_model_name} entraîné avec succès sur le jeu d'apprentissage.")
+
+
+# --- 11. Sauvegarde et Chargement du Modèle Entraîné ---
 print("\n--- Sauvegarde et Chargement du Modèle Entraîné ---")
 
-model_filename = 'logistic_regression_model.pkl'
+# Define the filename for saving the model
+model_filename = 'best_classification_model.pkl' # Changed filename to be more general
+
+# Save the trained best model
 try:
+    # Save the 'best_model' instance, which was fitted on X_train, y_train
     with open(model_filename, 'wb') as file:
-        pickle.dump(model_logistic_regression_cv, file)
-    print(f"\nModèle de Régression Logistique sauvegardé sous : {model_filename}")
+        pickle.dump(best_model, file)
+    print(f"\nModèle entraîné sauvegardé sous : {model_filename}")
 except Exception as e:
     print(f"Erreur lors de la sauvegarde du modèle : {e}")
 
-# 3. Charger le modèle sauvegardé
+# Load the saved model
 loaded_model = None
 try:
     with open(model_filename, 'rb') as file:
@@ -381,26 +377,30 @@ except FileNotFoundError:
 except Exception as e:
     print(f"Erreur lors du chargement du modèle : {e}")
 
-# 4. Vérifier le modèle chargé en effectuant une prédiction (si le chargement a réussi)
+# Verify the loaded model by making a prediction (if loading was successful)
 if loaded_model is not None:
     print("\nTest du modèle chargé sur un échantillon du jeu de test:")
-    # Prendre un échantillon du jeu de test pour la prédiction
-    # Assurez-vous que X_test est bien disponible et qu'il a la bonne forme
+    # Take a sample from the test set for prediction
+    # Ensure X_test is available and has the correct shape
     if X_test.shape[0] > 0:
-        sample_index = 0 # Prendre le premier échantillon
-        sample_data = X_test[sample_index].reshape(1, -1) # Reshape pour une seule prédiction
+        sample_index = 1
+        # Reshape the sample data to be a 2D array (required by predict method for a single sample)
+        sample_data = X_test[sample_index].reshape(1, -1)
 
-        predicted_outcome = loaded_model.predict(sample_data)
-        actual_outcome = y_test[sample_index]
+        try:
+            predicted_outcome = loaded_model.predict(sample_data)
+            actual_outcome = y_test[sample_index]
 
-        print(f"Données de l'échantillon (première ligne de X_test) : {sample_data}")
-        print(f"Prédiction du modèle chargé : {predicted_outcome[0]}")
-        print(f"Valeur réelle : {actual_outcome}")
+            print(f"Données de l'échantillon (première ligne de X_test) : {sample_data}")
+            print(f"Prédiction du modèle chargé : {predicted_outcome[0]}")
+            print(f"Valeur réelle : {actual_outcome}")
 
-        if predicted_outcome[0] == actual_outcome:
-            print("La prédiction du modèle chargé correspond à la valeur réelle pour cet échantillon.")
-        else:
-            print("La prédiction du modèle chargé ne correspond PAS à la valeur réelle pour cet échantillon.")
+            if predicted_outcome[0] == actual_outcome:
+                print("La prédiction du modèle chargé correspond à la valeur réelle pour cet échantillon.")
+            else:
+                print("La prédiction du modèle chargé ne correspond PAS à la valeur réelle pour cet échantillon.")
+        except Exception as e:
+             print(f"Erreur lors de la prédiction avec le modèle chargé : {e}")
     else:
         print("Le jeu de test (X_test) est vide, impossible de tester le modèle chargé.")
 else:
