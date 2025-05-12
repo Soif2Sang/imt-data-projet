@@ -110,6 +110,16 @@ print(df.head())
 print("\nTypes de données après encodage:")
 print(df.dtypes)
 
+# Afficher les colonnes numériques après encodage
+print("\nColonnes numériques après encodage:")
+numeric_cols = df.select_dtypes(include=['int64', 'float64']).columns
+
+# Create histograms for each numeric column
+df[numeric_cols].hist(figsize=(12, 10))
+plt.suptitle('Histograms of Numeric Columns (After LabelEncoder)', y=1.02) # Add a general title
+plt.tight_layout() # Adjust layout to prevent overlapping titles
+plt.show()
+
 # --- 5. Détection et Traitement des Outliers ---
 print("\n--- Détection et Traitement des Outliers ---")
 
@@ -158,25 +168,25 @@ print("\n--- Analyse de Corrélation ---")
 correlation_matrix = df.corr(numeric_only=True)
 print("\nMatrice de Corrélation :\n", correlation_matrix)
 
-# Corrélation d'une variable particulière avec toutes les autres (par exemple, 'past_accidents')
-past_accidents_correlation = correlation_matrix['past_accidents'].sort_values(ascending=False)
-print("\nCorrélation de 'past_accidents' avec les autres variables :\n", past_accidents_correlation)
+# Corrélation d'une variable particulière avec toutes les autres (par exemple, 'outcome')
+outcome_correlation = correlation_matrix['outcome'].sort_values(ascending=False)
+print("\nCorrélation de 'outcome' avec les autres variables :\n", outcome_correlation)
 
 # Identification des variables d'entrée les plus corrélées entre elles
 # On évite la diagonale et on ne regarde qu'une moitié de la matrice pour éviter les doublons
-upper_triangle = np.triu(correlation_matrix, k=1)
-highly_correlated_pairs = []
-threshold_correlation = 0.5  # Seuil de corrélation à considérer comme élevé
-
-# Obtenir les noms des colonnes numériques pour l'indexation
-numeric_col_names = correlation_matrix.columns.tolist()
-
-for i in range(len(numeric_col_names)):
-    for j in range(i + 1, len(numeric_col_names)):
-        if abs(upper_triangle[i, j]) > threshold_correlation:
-            highly_correlated_pairs.append((numeric_col_names[i], numeric_col_names[j], upper_triangle[i, j]))
-
-print(f"\nPaires de variables d'entrée fortement corrélées (>{threshold_correlation}):\n", highly_correlated_pairs)
+# upper_triangle = np.triu(correlation_matrix, k=1)
+# highly_correlated_pairs = []
+# threshold_correlation = 0.5  # Seuil de corrélation à considérer comme élevé
+#
+# # Obtenir les noms des colonnes numériques pour l'indexation
+# numeric_col_names = correlation_matrix.columns.tolist()
+#
+# for i in range(len(numeric_col_names)):
+#     for j in range(i + 1, len(numeric_col_names)):
+#         if abs(upper_triangle[i, j]) > threshold_correlation:
+#             highly_correlated_pairs.append((numeric_col_names[i], numeric_col_names[j], upper_triangle[i, j]))
+#
+# print(f"\nPaires de variables d'entrée fortement corrélées (>{threshold_correlation}):\n", highly_correlated_pairs)
 
 # Affichage de la matrice de corrélation sous forme de heatmap
 plt.figure(figsize=(14, 12)) # Increased figure size for better readability
@@ -193,7 +203,6 @@ print("\n--- Extraction des jeux d'apprentissage et de test ---")
 # Nous supposons que 'outcome' est la variable cible.
 # Si votre dataset utilise un autre nom pour la variable cible (ex: 'is_claim', 'fraud_reported'),
 # veuillez ajuster la ligne suivante en conséquence.
-# Si l'objectif est de prédire 'past_accidents', utilisez: y = df['past_accidents']
 target_variable = 'outcome'
 y = df[target_variable]
 X = df.drop(target_variable, axis=1)
