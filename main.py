@@ -4,7 +4,7 @@ import matplotlib
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.linear_model import LogisticRegression, Perceptron
 from sklearn.model_selection import train_test_split, KFold, cross_val_score
-from sklearn.preprocessing import LabelEncoder
+from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.metrics import accuracy_score, confusion_matrix, precision_score, recall_score, f1_score
 import seaborn as sns
 import pickle
@@ -17,7 +17,7 @@ except ImportError:
 import matplotlib.pyplot as plt
 
 print("--- Chargement et Inspection Initiales des Données ---")
-# --- 1. Chargement des données ---
+# --- 3. Importation des données ---
 df = pd.read_csv('car_insurance.csv')
 
 # Affichage de types
@@ -28,28 +28,41 @@ print(df.dtypes)
 print("\nPremiers enregistrements:")
 print(df.head())
 
+# --- 4. Examen des données
+
 # Affichage de la taille des données
 print("\nTaille du jeu de données (lignes, colonnes):")
 print(df.shape)
 
-# --- 2. Gestion des valeurs manquantes (NaNs) ---
-print("\n--- Gestion des Valeurs Manquantes ---")
+# Affichage des valeurs manquantes (NaNs) ---
+print("\n--- Affichage des Valeurs Manquantes (NaNs) ---")
 print("Colonnes avec des valeurs NaN:")
 for col in df.columns:
     if df[col].isnull().any():
         nan_count = df[col].isnull().sum()
         print(f"- {col}: {nan_count} NaN(s)")
 
+## Visualisation des distributions (Histograms) ---
+
+print("\n--- Visualisation des Distributions Numériques (Histograms) ---")
+# Identifier les colonnes numériques après imputation
+
+# Create histograms for each column
+df.hist(figsize=(12, 10))
+plt.suptitle('Histograms for each column', y=1.02)
+plt.tight_layout()
+plt.show()
+
+# --- 5. Préparation des données ---
+
+
+for col in df.columns:
+    if df[col].isnull().any():
         # Remplacer les NaN par la médiane pour les colonnes numériques
-        # Assurez-vous que la colonne est numérique avant de calculer la médiane
         if df[col].dtype in ['int64', 'float64']:
              median_value = df[col].median()
              df[col] = df[col].fillna(median_value)
              print(f"  NaNs dans '{col}' remplacés par la médiane ({median_value:.2f}).")
-        else:
-             # Pour les colonnes non numériques avec NaNs, on pourrait utiliser le mode ou une autre stratégie
-             # Dans ce dataset, les NaNs sont dans des colonnes numériques, donc la médiane est appropriée ici.
-             pass # Aucune colonne non numérique avec NaN identifiée dans l'output précédent
 
 # Vérifier s'il reste des NaNs après imputation
 print("\nVérification des NaNs après imputation:")
@@ -59,19 +72,6 @@ else:
     print("Des valeurs NaN subsistent dans certaines colonnes:")
     print(df.isnull().sum()[df.isnull().sum() > 0])
 
-
-# --- 3. Visualisation des distributions (Histograms) ---
-print("\n--- Visualisation des Distributions Numériques (Histograms) ---")
-# Identifier les colonnes numériques après imputation
-numeric_cols = df.select_dtypes(include=['int64', 'float64']).columns
-
-# Create histograms for each numeric column
-df[numeric_cols].hist(figsize=(12, 10))
-plt.suptitle('Histograms of Numeric Columns (After NaN Imputation)', y=1.02) # Add a general title
-plt.tight_layout() # Adjust layout to prevent overlapping titles
-plt.show()
-
-# --- 4. Normalisation des chaînes et Encodage des variables qualitatives ---
 print("\n--- Normalisation des Chaînes et Encodage Qualitatif ---")
 # Identifier les colonnes de type objet (qui contiennent généralement des chaînes)
 string_cols = df.select_dtypes(include='object').columns
@@ -120,7 +120,6 @@ plt.suptitle('Histograms of Numeric Columns (After LabelEncoder)', y=1.02) # Add
 plt.tight_layout() # Adjust layout to prevent overlapping titles
 plt.show()
 
-# --- 5. Détection et Traitement des Outliers ---
 print("\n--- Détection et Traitement des Outliers ---")
 
 def detect_outliers_percentile_indices(series, lower_percentile=0.01, upper_percentile=0.99):
@@ -160,8 +159,103 @@ plt.suptitle('Histograms of Numeric Columns After Outlier Replacement', y=1.02)
 plt.tight_layout()
 plt.show()
 
+# Normalisation des Données (StandardScaler) ---
+print("\n--- Normalisation des Données (StandardScaler) ---")
 
-# --- 6. Analyse de Corrélation ---
+# IMPORTANT: Define your target column and any ID columns that should NOT be scaled.
+# Common names - adjust if your CSV uses different names.
+target_column = 'outcome'
+id_column = 'Id'
+
+# Create a list of feature columns to be scaled
+columns_to_scale = df.columns.tolist()
+
+# Remove target column from scaling list (if it exists)
+if target_column in columns_to_scale:
+    columns_to_scale.remove(target_column)
+    print(f"Colonne cible ('{target_column}') exclue de la normalisation.")
+elif target_column in df.columns: # It exists but wasn't in columns_to_scale (e.g. if columns_to_scale was already filtered)
+     print(f"Note : La colonne cible ('{target_column}') existe mais n'était pas dans la liste initiale à normaliser.")
+else:
+    print(f"Avertissement : La colonne cible ('{target_column}') non trouvée dans le DataFrame. "
+          "Toutes les colonnes (sauf l'ID potentiel) seront normalisées. "
+          "Veuillez vérifier le nom de votre colonne cible.")
+
+# Remove ID column from scaling list (if it exists)
+if id_column in columns_to_scale:
+    columns_to_scale.remove(id_column)
+    print(f"Colonne ID ('{id_column}') exclue de la normalisation.")
+elif id_column in df.columns:
+    print(f"Note : La colonne ID ('{id_column}') existe mais n'était pas dans la liste initiale à normaliser.")
+else:
+    print(f"Note : Colonne ID ('{id_column}') non trouvée. Aucune colonne ID à exclure spécifiquement.")
+
+
+# Ensure all columns to scale are actually numeric before proceeding
+final_features_to_scale = [col for col in columns_to_scale if pd.api.types.is_numeric_dtype(df[col])]
+if not final_features_to_scale:
+    print("Aucune colonne numérique identifiée pour la normalisation après exclusions. Vérifiez vos noms de colonnes.")
+else:
+    print(f"\nColonnes qui seront normalisées : {final_features_to_scale}")
+
+    # Separate features to be scaled
+    X_to_scale = df[final_features_to_scale]
+
+    # Initialize StandardScaler
+    scaler = StandardScaler()
+
+    # Fit the scaler and transform the features (converting to NumPy array as requested)
+    # .values converts the DataFrame subset to a NumPy array
+    X_scaled_values = scaler.fit_transform(X_to_scale.values)
+
+    # Convert the scaled NumPy array back to a DataFrame with original column names and index
+    X_scaled_df = pd.DataFrame(X_scaled_values, columns=final_features_to_scale, index=X_to_scale.index)
+
+    # Update the original DataFrame with the scaled feature columns
+    df[final_features_to_scale] = X_scaled_df
+
+    print("\nPremières lignes du DataFrame après normalisation des caractéristiques:")
+    print(df.head())
+
+    print("\nStatistiques descriptives des caractéristiques normalisées (vérification - moyenne proche de 0, std proche de 1):")
+    print(df[final_features_to_scale].describe())
+
+    # Visualisation après normalisation (optionnel, mais peut être utile)
+    print("\n--- Visualisation des Distributions Numériques (Après Normalisation) ---")
+    if final_features_to_scale: # Check if there are any scaled features to plot
+        df[final_features_to_scale].hist(figsize=(12, 10))
+        plt.suptitle('Histograms of Scaled Numeric Features', y=1.02)
+        plt.tight_layout()
+        plt.show()
+    else:
+        print("Aucune caractéristique n'a été normalisée pour la visualisation.")
+
+# Afficher les types de données finaux pour s'assurer que tout est numérique comme prévu
+print("\nTypes de données finaux dans df:")
+print(df.dtypes)
+
+# Le DataFrame 'df' contient maintenant les données préparées et normalisées.
+# Vous pouvez maintenant procéder à la division train/test et à l'entraînement des modèles.
+print("\n--- Préparation des données terminée. Prêt pour la modélisation. ---")
+
+# Example: Separating features (X) and target (y) for model training
+# This assumes 'outcome' is your target and is now numerically encoded.
+if target_column in df.columns:
+    X = df.drop([col for col in [target_column, id_column] if col in df.columns], axis=1)
+    y = df[target_column]
+    print(f"\nVariables d'entrée (X) après normalisation (premières lignes) pour la modélisation (colonne '{target_column}' et '{id_column}' exclues):")
+    print(X.head())
+    print(f"\nVariable cible (y) (premières lignes):")
+    print(y.head())
+else:
+    print(f"\nLa colonne cible '{target_column}' n'a pas été trouvée. Impossible de séparer X et y automatiquement.")
+    X = df.drop([col for col in [id_column] if col in df.columns], axis=1) # Drop ID if it exists
+    y = None # Target is unknown
+    print(f"\nVariables d'entrée (X) après normalisation (premières lignes) pour la modélisation (colonne '{id_column}' exclue, cible inconnue):")
+    print(X.head())
+
+
+# --- 6. Recherche de Corrélation ---
 print("\n--- Analyse de Corrélation ---")
 
 # Calculer la matrice de corrélation pour toutes les variables numériques (incluant les colonnes encodées)
@@ -284,7 +378,7 @@ f1 = f1_score(y_test, y_pred, pos_label=1, average='binary', zero_division=0)
 print(f"\nScore F1 : {f1:.4f}")
 
 
-# --- 9. Amélioration de l'évaluation par Validation Croisée (K-Fold) ---
+# --- 10. Amélioration de l'évaluation par Validation Croisée (K-Fold) ---
 print("\n--- Amélioration de l'évaluation par Validation Croisée (K-Fold) ---")
 
 # Define the cross-validation strategy
@@ -307,7 +401,7 @@ std_cv_accuracy = np.std(cv_scores)
 print(f"\nExactitude moyenne de la validation croisée : {mean_cv_accuracy:.4f}")
 print(f"Écart-type de l'exactitude de la validation croisée : {std_cv_accuracy:.4f}")
 
-# --- 10. Comparaison avec d'autres algorithmes ---
+# --- 11. Comparaison avec d'autres algorithmes ---
 print("\n--- Comparaison avec d'autres algorithmes de classification ---")
 
 # Define the classifiers to compare with some initial hyperparameters
