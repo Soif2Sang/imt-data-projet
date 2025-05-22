@@ -335,7 +335,7 @@ print("\n--- Entraînement et Évaluation du Modèle de Régression Logistique (
 
 # Instancier le modèle de Régression Logistique
 # Increased max_iter to 10000 to help with convergence
-model_logistic_regression = LogisticRegression(random_state=42, max_iter=10000)
+model_logistic_regression = LogisticRegression(random_state=42, max_iter=100)
 
 # Entraîner le modèle sur le jeu d'apprentissage
 print("Entraînement du modèle de Régression Logistique sur le jeu d'apprentissage...")
@@ -385,7 +385,7 @@ print("\n--- Amélioration de l'évaluation par Validation Croisée (K-Fold) ---
 kf = KFold(n_splits=5, shuffle=True, random_state=42)
 
 # Use the same Logistic Regression model instance configuration
-model_logistic_regression_cv = LogisticRegression(random_state=42, max_iter=10000)
+model_logistic_regression_cv = LogisticRegression(random_state=42, max_iter=100)
 
 # Perform cross-validation and get the scores
 # We will use 'accuracy' as the metric for comparison
@@ -406,9 +406,9 @@ print("\n--- Comparaison avec d'autres algorithmes de classification ---")
 
 # Define the classifiers to compare with some initial hyperparameters
 classifiers = {
-    "Régression Logistique": LogisticRegression(random_state=42, max_iter=10000),
-    "Perceptron": Perceptron(random_state=42, max_iter=10000, tol=1e-3),
-    "K-Plus Proches Voisins (K=5)": KNeighborsClassifier(n_neighbors=5)
+    "Régression Logistique": LogisticRegression(random_state=42, max_iter=100),
+    "Perceptron": Perceptron(random_state=42, max_iter=100, tol=1e-3),
+    "K-Plus Proches Voisins (K=15)": KNeighborsClassifier(n_neighbors=15)
 }
 
 results = {}
